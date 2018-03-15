@@ -12,6 +12,12 @@ const bip39 = __importStar(require("bip39"));
 const dotenv = __importStar(require("dotenv"));
 dotenv.config();
 const AuthzAsset_1 = require("./AuthzAsset");
+const AuthzOperations_1 = require("./AuthzOperations");
+exports.AuthzOperations = AuthzOperations_1.AuthzOperations;
+const AuthzAction_1 = require("./AuthzAction");
+exports.AuthzAction = AuthzAction_1.AuthzAction;
+const AuthzPermissions_1 = require("./AuthzPermissions");
+exports.AuthzPermissions = AuthzPermissions_1.AuthzPermissions;
 /**
  * BCDBAuthz is the facade class that should be used to work with bcdb-authz.
  */
@@ -29,6 +35,7 @@ class BcdbAuthz {
         this.appId = appId;
         this.appKey = appKey;
         this.bcdbAuthzId = "bcdbauthzid";
+        this.bcbdAuthzActionVersion = "0.0.1";
         this.connection = new driver.Connection(this.bigchaindbUrl, {
             app_id: this.appId,
             app_key: this.appKey
@@ -115,7 +122,41 @@ class BcdbAuthz {
     /*searchAssetsByBcdbAuthzId(bcdbAuthzId: string): Promise<Array<AuthzAsset>> {
         
     }*/
-    updateAsset(asset, authzOperation) {
+    updateAsset(assetId, keySeed, authzAction) {
+        return new Promise((resolve, reject) => {
+            try {
+                // Generate keypair with supplied keySeed.
+                let identity = this.generateKeyByBip39(keySeed);
+                // Search for the latest transaction that is involved in this asset.
+                this.connection.listTransactions(assetId).then(transactionList => {
+                    // Pull the transaction that we want to update. (the latest one)
+                    return this.connection.getTransaction(transactionList[transactionList.length - 1].id);
+                }).then(returnedTransaction => {
+                    // Create a transfer transaction in which we use the new identity as output.
+                    const updatePermissionsTransaction = driver.Transaction.makeTransferTransaction(
+                    // signedTx to transfer and output index
+                    [{ tx: returnedTransaction, output_index: 0 }], [driver.Transaction.makeOutput(driver.Transaction.makeEd25519Condition(identity.publicKey))], 
+                    // metadata
+                    authzAction);
+                    // We sign the new transaction.
+                    const signedUpdatePermissionsTransaction = driver.Transaction.signTransaction(updatePermissionsTransaction, identity.privateKey);
+                    // Send the TRANSFER transaction.
+                    return this.connection.postTransaction(signedUpdatePermissionsTransaction);
+                }).then(signedUpdatePermissionsTransaction => {
+                    // Poll for status and move on.
+                    return this.connection.pollStatusAndFetchTransaction(signedUpdatePermissionsTransaction.id);
+                }).then(response => {
+                    // Return the required asset. for some reason this doesn't work. Will fix later.
+                    //resolve(new AuthzAsset(response.id, response.asset.data.bcdbauthzid));
+                    resolve(response);
+                });
+            }
+            catch (error) {
+                reject(error);
+            }
+        });
+    }
+    getLatestTransaction(assetId) {
         return new Promise((resolve, reject) => {
             reject(new Error("Not implemented yet."));
         });

@@ -5,8 +5,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
  */
 var AuthzPermissions;
 (function (AuthzPermissions) {
-    AuthzPermissions[AuthzPermissions["CREATE"] = 0] = "CREATE";
-    AuthzPermissions[AuthzPermissions["READ"] = 1] = "READ";
-    AuthzPermissions[AuthzPermissions["UPDATE"] = 2] = "UPDATE";
-    AuthzPermissions[AuthzPermissions["DELETE"] = 3] = "DELETE";
+    AuthzPermissions["CREATE"] = "CREATE";
+    AuthzPermissions["READ"] = "READ";
+    AuthzPermissions["UPDATE"] = "UPDATE";
+    AuthzPermissions["DELETE"] = "DELETE";
+    AuthzPermissions["ALL"] = "ALL";
 })(AuthzPermissions = exports.AuthzPermissions || (exports.AuthzPermissions = {}));

@@ -1,4 +1,4 @@
-export enum AuthzOperation
+export enum AuthzOperations
 {
     GRANT = "GRANT",
     REVOKE = "REVOKE",
