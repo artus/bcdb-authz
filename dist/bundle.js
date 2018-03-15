@@ -87,6 +87,7 @@ class BcdbAuthz {
         this.appKey = appKey;
         this.bcdbAuthzId = "bcdbauthzid";
         this.bcbdAuthzActionVersion = "0.0.1";
+        this.loggingEnabled = true;
         this.connection = new driver.Connection(this.bigchaindbUrl, {
             app_id: this.appId,
             app_key: this.appKey
@@ -170,9 +171,24 @@ class BcdbAuthz {
             }
         });
     }
-    /*searchAssetsByBcdbAuthzId(bcdbAuthzId: string): Promise<Array<AuthzAsset>> {
-        
-    }*/
+    /**
+     * Search an asset based on its bcdbauthzid, which is a unique identifier it was given on creation.
+     * @param {string} bcdbAuthzId - The bcdbauthzid of the asset we're looking for.
+     */
+    searchAssetByBcdbAuthzId(bcdbAuthzId) {
+        return new Promise((resolve, reject) => {
+            try {
+                this.connection.searchAssets(`'${bcdbAuthzId}'`).then(assetQueryList => {
+                    return this.getAsset(assetQueryList[0].id);
+                }).then(returnedAsset => {
+                    resolve(returnedAsset);
+                });
+            }
+            catch (error) {
+                reject(new Error(error));
+            }
+        });
+    }
     updateAsset(assetId, keySeed, authzAction) {
         return new Promise((resolve, reject) => {
             try {
@@ -209,7 +225,19 @@ class BcdbAuthz {
     }
     getLatestTransaction(assetId) {
         return new Promise((resolve, reject) => {
-            reject(new Error("Not implemented yet."));
+            try {
+                // Get a list of all transactions for a certain asset.
+                this.log(`Get a list of all transactions for asset with id: ${assetId}`);
+                this.connection.listTransactions(assetId).then(transactionList => {
+                    this.log(`Reponse received, loaded ${transactionList.length} transactions.`);
+                    this.log(`Pull the latest transaction from this list.`);
+                    // Pull the transaction that we want to update. (the latest one)
+                    resolve(this.connection.getTransaction(transactionList[transactionList.length - 1].id));
+                });
+            }
+            catch (error) {
+                reject(new Error(error));
+            }
         });
     }
     getAssetPersmissionsByPerson(personId) {
@@ -221,36 +249,62 @@ class BcdbAuthz {
         return new Promise((resolve, reject) => {
             try {
                 // Generate keypairs from seeds.
+                this.log("Generating keypairs from supplied keys.");
                 let oldIdentity = this.generateKeyByBip39(oldKeySeed);
                 let newIdentity = this.generateKeyByBip39(newKeySeed);
-                // Get a list of all transactions for a certain asset.
-                this.connection.listTransactions(assetId).then(transactionList => {
-                    // Pull the transaction that we want to update. (the latest one)
-                    return this.connection.getTransaction(transactionList[transactionList.length - 1].id);
-                }).then(returnedTransaction => {
+                // Pulling latest transaction from asset.
+                this.getLatestTransaction(assetId).then(returnedTransaction => {
+                    this.log(`Generating TRANSFER transaction.`);
                     // Create a transfer transaction in which we use the new identity as output.
                     const updateKeyTransaction = driver.Transaction.makeTransferTransaction(
                     // signedTx to transfer and output index
                     [{ tx: returnedTransaction, output_index: 0 }], [driver.Transaction.makeOutput(driver.Transaction.makeEd25519Condition(newIdentity.publicKey))], 
                     // metadata
                     { "action": "update-key" });
+                    this.log(`Signing transfer transaction.`);
                     // We sign the new transaction with the old identity.
                     const signedUpdateKeyTransaction = driver.Transaction.signTransaction(updateKeyTransaction, oldIdentity.privateKey);
                     // Send the TRANSFER transaction.
+                    this.log("Posting newly created transaction to the network.");
                     return this.connection.postTransaction(signedUpdateKeyTransaction);
                 }).then(signedUpdateKeyTransaction => {
                     // Poll for status and move on.
+                    this.log("Polling for the created transactions' status.");
                     return this.connection.pollStatusAndFetchTransaction(signedUpdateKeyTransaction.id);
                 }).then(response => {
-                    // Return the required asset. for some reason this doesn't work. Will fix later.
-                    //resolve(new AuthzAsset(response.id, response.asset.data.bcdbauthzid));
-                    resolve(response);
+                    this.log("Response transaction received:");
+                    this.log(response, false);
+                    this.log("Query for the asset this transaction belongs to.");
+                    // Get the asset from the transaction
+                    return this.getAsset(response.asset.id);
+                }).then(returnedAsset => {
+                    this.log(`Asset received, id: ${returnedAsset.assetId}`);
+                    resolve(returnedAsset);
                 });
             }
             catch (error) {
                 reject(new Error(error));
             }
         });
+    }
+    /**
+     * Log output to the console.
+     *
+     * @param {any} message - The message that needs to be logged to the console.
+     * @param {boolean} [isText=true] - A boolean that states that the message should be handled as text or as an object.
+     */
+    log(message, isText = true) {
+        // Parse the time
+        let time = new Date().toLocaleTimeString();
+        if (this.loggingEnabled) {
+            if (isText) {
+                console.log(`${time}: ${message}`);
+            }
+            else {
+                console.log(`${time}`);
+                console.log(message);
+            }
+        }
     }
 }
 exports.BcdbAuthz = BcdbAuthz;

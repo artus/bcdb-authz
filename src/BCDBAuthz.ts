@@ -19,6 +19,8 @@ export class BcdbAuthz {
     private bcbdAuthzActionVersion = "0.0.1";
     private connection: any;
 
+    loggingEnabled: boolean = true;
+
     /**
      * Initialise a new BCDBAuthz facade class.
      * @constructor
@@ -133,9 +135,24 @@ export class BcdbAuthz {
         });
     }
 
-    /*searchAssetsByBcdbAuthzId(bcdbAuthzId: string): Promise<Array<AuthzAsset>> {
-        
-    }*/
+    /**
+     * Search an asset based on its bcdbauthzid, which is a unique identifier it was given on creation.
+     * @param {string} bcdbAuthzId - The bcdbauthzid of the asset we're looking for.
+     */
+    searchAssetByBcdbAuthzId(bcdbAuthzId: string): Promise<AuthzAsset> {
+        return new Promise<AuthzAsset>((resolve, reject) => {
+            try {
+                this.connection.searchAssets(`'${bcdbAuthzId}'`).then(assetQueryList => {
+                    return this.getAsset(assetQueryList[0].id);
+                }).then(returnedAsset => {
+                    resolve(returnedAsset);
+                });
+            }
+            catch (error) {
+                reject(new Error(error));
+            }
+        });
+    }
 
     updateAsset(assetId: string, keySeed: string, authzAction: AuthzAction): Promise<AuthzArray> {
         return new Promise<AuthzArray>((resolve, reject) => {
@@ -185,9 +202,23 @@ export class BcdbAuthz {
         })
     }
 
-    private getLatestTransaction(assetId: string): Promise<any> {
+    getLatestTransaction(assetId: string): Promise<any> {
         return new Promise<any>((resolve, reject) => {
-            reject(new Error("Not implemented yet."));
+            try {
+                // Get a list of all transactions for a certain asset.
+                this.log(`Get a list of all transactions for asset with id: ${assetId}`);
+                this.connection.listTransactions(assetId).then(transactionList => {
+
+                    this.log(`Reponse received, loaded ${transactionList.length} transactions.`);
+                    this.log(`Pull the latest transaction from this list.`);
+
+                    // Pull the transaction that we want to update. (the latest one)
+                    resolve(this.connection.getTransaction(transactionList[transactionList.length - 1].id));
+                });
+            }
+            catch (error) {
+                reject(new Error(error));
+            }
         });
     }
 
@@ -201,16 +232,14 @@ export class BcdbAuthz {
         return new Promise((resolve, reject) => {
             try {
                 // Generate keypairs from seeds.
+                this.log("Generating keypairs from supplied keys.");
                 let oldIdentity = this.generateKeyByBip39(oldKeySeed);
                 let newIdentity = this.generateKeyByBip39(newKeySeed);
 
-                // Get a list of all transactions for a certain asset.
-                this.connection.listTransactions(assetId).then(transactionList => {
+                // Pulling latest transaction from asset.
+                this.getLatestTransaction(assetId).then(returnedTransaction => {
 
-                    // Pull the transaction that we want to update. (the latest one)
-                    return this.connection.getTransaction(transactionList[transactionList.length - 1].id);
-
-                }).then(returnedTransaction => {
+                    this.log(`Generating TRANSFER transaction.`);
 
                     // Create a transfer transaction in which we use the new identity as output.
                     const updateKeyTransaction = driver.Transaction.makeTransferTransaction(
@@ -223,26 +252,58 @@ export class BcdbAuthz {
                         { "action": "update-key" }
                     );
 
+                    this.log(`Signing transfer transaction.`);
+
                     // We sign the new transaction with the old identity.
                     const signedUpdateKeyTransaction = driver.Transaction.signTransaction(updateKeyTransaction, oldIdentity.privateKey);
 
                     // Send the TRANSFER transaction.
+                    this.log("Posting newly created transaction to the network.");
                     return this.connection.postTransaction(signedUpdateKeyTransaction);
                 }).then(signedUpdateKeyTransaction => {
 
                     // Poll for status and move on.
+                    this.log("Polling for the created transactions' status.");
                     return this.connection.pollStatusAndFetchTransaction(signedUpdateKeyTransaction.id);
                 }).then(response => {
 
-                    // Return the required asset. for some reason this doesn't work. Will fix later.
-                    //resolve(new AuthzAsset(response.id, response.asset.data.bcdbauthzid));
-                    resolve(response);
+                    this.log("Response transaction received:");
+                    this.log(response, false);
+
+                    this.log("Query for the asset this transaction belongs to.");
+                    // Get the asset from the transaction
+                    return this.getAsset(response.asset.id);
+                }).then(returnedAsset => {
+                    this.log(`Asset received, id: ${returnedAsset.assetId}`);
+                    resolve(returnedAsset);
                 });
             }
             catch (error) {
                 reject(new Error(error));
             }
         })
+    }
+
+    /**
+     * Log output to the console.
+     * 
+     * @param {any} message - The message that needs to be logged to the console.
+     * @param {boolean} [isText=true] - A boolean that states that the message should be handled as text or as an object.
+     */
+    public log(message: any, isText: boolean = true) {
+
+        // Parse the time
+        let time = new Date().toLocaleTimeString();
+
+        if (this.loggingEnabled) {
+            if (isText) {
+                console.log(`${time}: ${message}`);
+            }
+            else {
+                console.log(`${time}`);
+                console.log(message);
+            }
+        }
     }
 }
 
