@@ -1,7 +1,5 @@
-export class AuthzOperation
+export enum AuthzOperation
 {
-    constructor()
-    {
-        // TODO
-    }
+    GRANT = "GRANT",
+    REVOKE = "REVOKE",
 }

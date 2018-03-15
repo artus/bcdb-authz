@@ -1,7 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 class AuthzAsset {
-    constructor(bcdbAuthzId) {
+    constructor(assetId, bcdbAuthzId) {
+        this.assetId = assetId;
         this.bcdbAuthzId = bcdbAuthzId;
         // Let typescript handle the rest.
     }

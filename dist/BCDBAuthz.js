@@ -11,10 +11,11 @@ const driver = __importStar(require("bigchaindb-driver"));
 const bip39 = __importStar(require("bip39"));
 const dotenv = __importStar(require("dotenv"));
 dotenv.config();
+const AuthzAsset_1 = require("./AuthzAsset");
 /**
  * BCDBAuthz is the facade class that should be used to work with bcdb-authz.
  */
-class BCDBAuthz {
+class BcdbAuthz {
     /**
      * Initialise a new BCDBAuthz facade class.
      * @constructor
@@ -27,10 +28,10 @@ class BCDBAuthz {
         this.bigchaindbUrl = bigchaindbUrl;
         this.appId = appId;
         this.appKey = appKey;
-        this.bcdbAuthzId = "bcdbauthzid-";
-        this.connection = new driver.Connection(bigchaindbUrl, {
-            app_id: appId,
-            app_key: appKey
+        this.bcdbAuthzId = "bcdbauthzid";
+        this.connection = new driver.Connection(this.bigchaindbUrl, {
+            app_id: this.appId,
+            app_key: this.appKey
         });
     }
     /**
@@ -46,7 +47,7 @@ class BCDBAuthz {
      * @returns {any} The generated keypair.
      */
     generateKeyByBip39(keySeed) {
-        return bip39.mnemonicToSeed(keySeed).slice(0, 32);
+        return new driver.Ed25519Keypair(bip39.mnemonicToSeed(keySeed).slice(0, 32));
     }
     /**
      * Thank you https://stackoverflow.com/questions/105034/create-guid-uuid-in-javascript
@@ -59,7 +60,7 @@ class BCDBAuthz {
     /**
      * Create a new asset that should have its authorization controlled on bigchaindb.
      * @param {string} assetKeySeed - The seed that will be used to generate the keypair which will be used to update the asset in the future.
-     * @returns {Promise<AuthzAsset>} The newly created AuthzAsset wrapped in a promise.
+     * @returns {Promise<any>} The newly created transaction wrapped in a promise.
      */
     createAsset(assetKeySeed) {
         return new Promise((resolve, reject) => {
@@ -69,11 +70,11 @@ class BCDBAuthz {
                 // Generate a new identity for the AuthzAsset.
                 let authId = this.generateAuthzAssetId();
                 // Wrap the AuthzAssetId in an asset object
-                const assetData = {
+                let assetData = {
                     "bcdbauthzid": authId,
                 };
                 // Construct a new create transaction to add the asset to the bigchaindb.
-                const newCreateTransaction = this.connection.Transaction.makeCreateTransaction(assetData, 
+                const newCreateTransaction = driver.Transaction.makeCreateTransaction(assetData, null, 
                 // A transaction needs an output
                 [driver.Transaction.makeOutput(driver.Transaction.makeEd25519Condition(identity.publicKey))
                 ], identity.publicKey);
@@ -84,7 +85,8 @@ class BCDBAuthz {
                     // Wait for the transaction to complete and return it.
                     return this.connection.pollStatusAndFetchTransaction(signedTransaction.id);
                 }).then(response => {
-                    resolve(response);
+                    // Initalise a new AuthzAsset from the response.
+                    resolve(new AuthzAsset_1.AuthzAsset(response.id, response.asset.data.bcdbauthzid));
                 });
             }
             catch (error) {
@@ -94,19 +96,25 @@ class BCDBAuthz {
         });
     }
     /**
-     * Return an asset from the bigchaindb by using its ID.
-     * @param assetId
+     * Return an asset from the BigchainDB by using its ID.
+     * @param {string} assetId - The ID of the asset hashed by the algorithm used by BigchainDB.
      */
     getAsset(assetId) {
         return new Promise((resolve, reject) => {
-            reject(new Error("Not implemented yet."));
+            try {
+                this.connection.searchAssets(assetId).then(response => {
+                    let returnedAuthzAsset = new AuthzAsset_1.AuthzAsset(response[0].id, response[0].data.bcdbauthzid);
+                    resolve(returnedAuthzAsset);
+                });
+            }
+            catch (error) {
+                reject(new Error(error));
+            }
         });
     }
-    searchAssetsByBcdbAuthzId(bcdbAuthzId) {
-        return new Promise((resolve, reject) => {
-            reject(new Error("Not implemented yet."));
-        });
-    }
+    /*searchAssetsByBcdbAuthzId(bcdbAuthzId: string): Promise<Array<AuthzAsset>> {
+        
+    }*/
     updateAsset(asset, authzOperation) {
         return new Promise((resolve, reject) => {
             reject(new Error("Not implemented yet."));
@@ -117,10 +125,40 @@ class BCDBAuthz {
             reject(new Error("Not implemented yet."));
         });
     }
-    updateAssetKey(oldKeySeed, newKeySeed) {
+    updateAssetKey(assetId, oldKeySeed, newKeySeed) {
         return new Promise((resolve, reject) => {
-            reject(new Error("Not implemented yet."));
+            try {
+                // Generate keypairs from seeds.
+                let oldIdentity = this.generateKeyByBip39(oldKeySeed);
+                let newIdentity = this.generateKeyByBip39(newKeySeed);
+                // Get a list of all transactions for a certain asset.
+                this.connection.listTransactions(assetId).then(transactionList => {
+                    // Pull the transaction that we want to update. (the latest one)
+                    return this.connection.getTransaction(transactionList[transactionList.length - 1].id);
+                }).then(returnedTransaction => {
+                    // Create a transfer transaction in which we use the new identity as output.
+                    const updateKeyTransaction = driver.Transaction.makeTransferTransaction(
+                    // signedTx to transfer and output index
+                    [{ tx: returnedTransaction, output_index: 0 }], [driver.Transaction.makeOutput(driver.Transaction.makeEd25519Condition(newIdentity.publicKey))], 
+                    // metadata
+                    { "action": "update-key" });
+                    // We sign the new transaction with the old identity.
+                    const signedUpdateKeyTransaction = driver.Transaction.signTransaction(updateKeyTransaction, oldIdentity.privateKey);
+                    // Send the TRANSFER transaction.
+                    return this.connection.postTransaction(signedUpdateKeyTransaction);
+                }).then(signedUpdateKeyTransaction => {
+                    // Poll for status and move on.
+                    return this.connection.pollStatusAndFetchTransaction(signedUpdateKeyTransaction.id);
+                }).then(response => {
+                    // Return the required asset. for some reason this doesn't work. Will fix later.
+                    //resolve(new AuthzAsset(response.id, response.asset.data.bcdbauthzid));
+                    resolve(response);
+                });
+            }
+            catch (error) {
+                reject(new Error(error));
+            }
         });
     }
 }
-exports.BCDBAuthz = BCDBAuthz;
+exports.BcdbAuthz = BcdbAuthz;

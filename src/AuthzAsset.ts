@@ -1,6 +1,6 @@
 export class AuthzAsset
 {
-    constructor(public bcdbAuthzId : string)
+    constructor(public assetId : string, public bcdbAuthzId : string)
     {
         // Let typescript handle the rest.
     }
