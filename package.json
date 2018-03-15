@@ -1,0 +1,34 @@
+{
+  "name": "bcdb-authz",
+  "version": "0.0.1",
+  "description": "Enabling Authorization of external assets by using blockchain technology.",
+  "main": "dist/bcdb-authz.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "compile": "cd ./src && tsc",
+    "bundle": "browserify ./dist/BCDBAuthz.js -s bcdb_authz -o ./dist/bundle.js",
+    "build": "npm run compile && npm run bundle"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/artusvranken/bcdb-authz.git"
+  },
+  "keywords": [
+    "bigchaindb",
+    "blockchain",
+    "authorization",
+    "authz"
+  ],
+  "author": "Artus Vranken",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/artusvranken/bcdb-authz/issues"
+  },
+  "homepage": "https://github.com/artusvranken/bcdb-authz#readme",
+  "dependencies": {
+    "bigchaindb-driver": "^3.2.0",
+    "bip39": "^2.5.0",
+    "browserify": "^16.1.1",
+    "dotenv": "^5.0.1"
+  }
+}
