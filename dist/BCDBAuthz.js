@@ -12,12 +12,14 @@ const bip39 = __importStar(require("bip39"));
 const dotenv = __importStar(require("dotenv"));
 dotenv.config();
 const AuthzAsset_1 = require("./AuthzAsset");
+const AuthzSet_1 = require("./AuthzSet");
 const AuthzOperations_1 = require("./AuthzOperations");
 exports.AuthzOperations = AuthzOperations_1.AuthzOperations;
 const AuthzAction_1 = require("./AuthzAction");
 exports.AuthzAction = AuthzAction_1.AuthzAction;
 const AuthzPermissions_1 = require("./AuthzPermissions");
 exports.AuthzPermissions = AuthzPermissions_1.AuthzPermissions;
+const AuthzMetadata_1 = require("./AuthzMetadata");
 /**
  * BCDBAuthz is the facade class that should be used to work with bcdb-authz.
  */
@@ -138,6 +140,13 @@ class BcdbAuthz {
             }
         });
     }
+    /**
+     * Update the persmissions for a certain asset with supplied ID and where transactions can be performed upon by using the keypair that can be generated with supplied keySeed.
+     *
+     * @param {string} assetId - The ID of the asset we want to update the permissions from.
+     * @param {string} keySeed - The seed we want to use to generate a keypair, which we will use to sign the transaction.
+     * @param {AuthzAction} authzAction - The operation that needs to be performed on the asset with supplied ID.
+     */
     updateAsset(assetId, keySeed, authzAction) {
         return new Promise((resolve, reject) => {
             try {
@@ -153,7 +162,7 @@ class BcdbAuthz {
                     // signedTx to transfer and output index
                     [{ tx: returnedTransaction, output_index: 0 }], [driver.Transaction.makeOutput(driver.Transaction.makeEd25519Condition(identity.publicKey))], 
                     // metadata
-                    authzAction);
+                    new AuthzMetadata_1.AuthzMetadata("action", authzAction));
                     // We sign the new transaction.
                     const signedUpdatePermissionsTransaction = driver.Transaction.signTransaction(updatePermissionsTransaction, identity.privateKey);
                     // Send the TRANSFER transaction.
@@ -172,11 +181,16 @@ class BcdbAuthz {
             }
         });
     }
+    /**
+     * Get the latest transaction for a certain asset with supplied ID.
+     *
+     * @param {string} assetId - The ID of the asset we want to return the latest transaction from.
+     */
     getLatestTransaction(assetId) {
         return new Promise((resolve, reject) => {
             try {
                 // Get a list of all transactions for a certain asset.
-                this.log(`Get a list of all transactions for asset with id: ${assetId}`);
+                this.log(`Get a list of all transactions for asset with id: ${assetId}.`);
                 this.connection.listTransactions(assetId).then(transactionList => {
                     this.log(`Reponse received, loaded ${transactionList.length} transactions.`);
                     this.log(`Pull the latest transaction from this list.`);
@@ -189,11 +203,116 @@ class BcdbAuthz {
             }
         });
     }
-    getAssetPersmissionsByPerson(personId) {
+    /**
+     * Get a Map of permissions for an asset with supplied ID, for a specific moment in time.
+     *
+     * @param {string} assetId - The ID of the asset we want to know the permissions from.
+     * @param {Date} [date = new Date()] - The Date of the moment we want to know all permissions from.
+     *
+     * @returns {Promise<Map<string, AuthzSet>>} A promise that can be resolved to return the Map.
+     */
+    getAssetPermissions(assetId, date = new Date()) {
         return new Promise((resolve, reject) => {
-            reject(new Error("Not implemented yet."));
+            // Get a list of all transactions for a certain asset
+            this.log(`Get a list of all transactions for asset with id: ${assetId}.`);
+            this.connection.listTransactions(assetId).then(transactionList => {
+                let authzMap = new Map();
+                this.log(`Iterate over ${transactionList.length} transaction(s).`);
+                // Iterate over transactions and parse actions.
+                for (let transaction of transactionList) {
+                    this.log(transaction, false);
+                    // Check if the transaction is an action. (An action means that it contains a change in permissions)
+                    if (transaction.metadata != null && typeof transaction.metadata != "undefined" && transaction.metadata.type == "action") {
+                        let authzActionString = transaction.metadata.data;
+                        let authzAction = AuthzAction_1.AuthzAction.fromMetadata(authzActionString);
+                        //let authzAction = new AuthzAction(authzActionString.operation, authzActionString.permission, authzActionString.subject);
+                        this.log(`AuthzAction performed: `);
+                        this.log(authzAction, false);
+                        // Check if we want to check if the AuthzAction was performed after the date we want to query:
+                        let authzDate = new Date(authzActionString.date);
+                        if (authzDate > date)
+                            resolve(authzMap);
+                        // Parse the permissions into the authzMap.
+                        this.log(`Parsing AuthzAction to add to the AuthzSet of stakeholder '${authzAction.subject}'.`);
+                        if (typeof authzMap.get(authzAction.subject) == "undefined")
+                            authzMap.set(authzAction.subject, new AuthzSet_1.AuthzSet());
+                        switch (authzAction.permission) {
+                            case AuthzPermissions_1.AuthzPermissions.CREATE:
+                                this.log(`CREATE`);
+                                if (authzAction.operation == AuthzOperations_1.AuthzOperations.GRANT)
+                                    authzMap.get(authzAction.subject).permissions.add(AuthzPermissions_1.AuthzPermissions.CREATE);
+                                else
+                                    authzMap.get(authzAction.subject).permissions.delete(AuthzPermissions_1.AuthzPermissions.CREATE);
+                                break;
+                            case AuthzPermissions_1.AuthzPermissions.READ:
+                                this.log(`READ`);
+                                if (authzAction.operation == AuthzOperations_1.AuthzOperations.GRANT)
+                                    authzMap.get(authzAction.subject).permissions.add(AuthzPermissions_1.AuthzPermissions.READ);
+                                else
+                                    authzMap.get(authzAction.subject).permissions.delete(AuthzPermissions_1.AuthzPermissions.READ);
+                                break;
+                            case AuthzPermissions_1.AuthzPermissions.UPDATE:
+                                this.log(`UPDATE`);
+                                if (authzAction.operation == AuthzOperations_1.AuthzOperations.GRANT)
+                                    authzMap.get(authzAction.subject).permissions.add(AuthzPermissions_1.AuthzPermissions.UPDATE);
+                                else
+                                    authzMap.get(authzAction.subject).permissions.delete(AuthzPermissions_1.AuthzPermissions.UPDATE);
+                                break;
+                            case AuthzPermissions_1.AuthzPermissions.DELETE:
+                                this.log(`DELETE`);
+                                if (authzAction.operation == AuthzOperations_1.AuthzOperations.GRANT)
+                                    authzMap.get(authzAction.subject).permissions.add(AuthzPermissions_1.AuthzPermissions.DELETE);
+                                else
+                                    authzMap.get(authzAction.subject).permissions.delete(AuthzPermissions_1.AuthzPermissions.DELETE);
+                                break;
+                            case AuthzPermissions_1.AuthzPermissions.ALL:
+                                this.log(`ALL`);
+                                if (authzAction.operation == AuthzOperations_1.AuthzOperations.GRANT) {
+                                    authzMap.get(authzAction.subject).permissions.add(AuthzPermissions_1.AuthzPermissions.CREATE);
+                                    authzMap.get(authzAction.subject).permissions.add(AuthzPermissions_1.AuthzPermissions.READ);
+                                    authzMap.get(authzAction.subject).permissions.add(AuthzPermissions_1.AuthzPermissions.UPDATE);
+                                    authzMap.get(authzAction.subject).permissions.add(AuthzPermissions_1.AuthzPermissions.DELETE);
+                                }
+                                else {
+                                    authzMap.delete(authzAction.subject);
+                                }
+                        }
+                    }
+                }
+                resolve(authzMap);
+            });
         });
     }
+    /**
+     * Get a Set that contains all permissions for an asset with supplied ID for a certain stakeholder that is associated by an external service with the supplied stakeholderId at a specific moment in time.
+     *
+     * @param {string} assetId - The ID from the asset we want to return the persmissions from.
+     * @param {string} stakeholderId - The ID of the stakeholder.
+     * @param {Date} date - The Date of the moment we want to know the permissions from.
+     *
+     * @returns {Promise<AuthSet>} - A promise that can be resolved to return the AuthzSet for the stakeholder.
+     */
+    getAssetPermissionsByPerson(assetId, stakeholderId, date = new Date()) {
+        return new Promise((resolve, reject) => {
+            try {
+                this.getAssetPermissions(assetId, date).then(authzMap => {
+                    if (typeof authzMap.get(stakeholderId) == "undefined")
+                        resolve(new AuthzSet_1.AuthzSet());
+                    resolve(authzMap.get(stakeholderId));
+                });
+            }
+            catch (error) {
+                reject(error);
+            }
+        });
+    }
+    /**
+     * Update the keypair that can be used to sign a certain transaction.
+     *
+     * @param {string} assetId - The ID of the asset we want to update the keys from.
+     * @param {string} oldKeySeed - The seed we want to use to generate the old keypair.
+     * @param {string} newKeySeed - The seed we want to use to generate the new keypair.
+     */
     updateAssetKey(assetId, oldKeySeed, newKeySeed) {
         return new Promise((resolve, reject) => {
             try {
@@ -209,7 +328,7 @@ class BcdbAuthz {
                     // signedTx to transfer and output index
                     [{ tx: returnedTransaction, output_index: 0 }], [driver.Transaction.makeOutput(driver.Transaction.makeEd25519Condition(newIdentity.publicKey))], 
                     // metadata
-                    { "action": "update-key" });
+                    new AuthzMetadata_1.AuthzMetadata("update-key"));
                     this.log(`Signing transfer transaction.`);
                     // We sign the new transaction with the old identity.
                     const signedUpdateKeyTransaction = driver.Transaction.signTransaction(updateKeyTransaction, oldIdentity.privateKey);
