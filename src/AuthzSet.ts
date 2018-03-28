@@ -1,4 +1,4 @@
-import { AuthzPermissions } from "./BcdbAuthz";
+import { AuthzPermissions } from "./AuthzPermissions";
 
 /**
  * An AuthzArray is an Array of permissions for a certain person, 
