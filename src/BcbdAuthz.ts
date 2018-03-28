@@ -23,18 +23,25 @@ export class BcdbAuthz {
     loggingEnabled: boolean = true;
 
     /**
-     * Initialise a new BCDBAuthz facade class.
+     * Initialize a new BCDBAuthz facade class.
      * @constructor
      * 
      * @param {string} bigchaindbUrl - The URL of the bigchaindb network you want to connect to.
-     * @param {string} appId - Your app ID.
-     * @param {string} appKey - Your app Key.
+     * @param {string} [appId = undefined] - Your app ID.
+     * @param {string} [appKey = undefined] - Your app Key.
      */
-    constructor(public bigchaindbUrl: string, public appId: string, public appKey: string) {
-        this.connection = new driver.Connection(this.bigchaindbUrl, {
-            app_id: this.appId,
-            app_key: this.appKey
-        })
+    constructor(public bigchaindbUrl: string, public appId: string = undefined, public appKey: string = undefined) {
+
+        if (typeof this.appId == "undefined" || typeof this.appKey == "undefined") {
+            this.connection = new driver.Connection(this.bigchaindbUrl);
+        }
+        else {
+
+            this.connection = new driver.Connection(this.bigchaindbUrl, {
+                app_id: this.appId,
+                app_key: this.appKey
+            });
+        }
     }
 
     /**
@@ -340,15 +347,15 @@ export class BcdbAuthz {
      */
     getAssetPermissionsByPerson(assetId: string, stakeholderId: string, date: Date = new Date()): Promise<AuthzSet> {
         return new Promise((resolve, reject) => {
-                this.getAssetPermissions(assetId, date).then(authzMap => {
+            this.getAssetPermissions(assetId, date).then(authzMap => {
 
-                    if (typeof authzMap.get(stakeholderId) == "undefined") resolve(new AuthzSet());
-                    resolve(authzMap.get(stakeholderId));
-                }).catch(error => {
+                if (typeof authzMap.get(stakeholderId) == "undefined") resolve(new AuthzSet());
+                resolve(authzMap.get(stakeholderId));
+            }).catch(error => {
 
-                    // Throw the error.
-                    reject(error);
-                });
+                // Throw the error.
+                reject(error);
+            });
         });
     }
 
@@ -361,56 +368,56 @@ export class BcdbAuthz {
      */
     updateAssetKey(assetId: string, oldKeySeed: string, newKeySeed: string): Promise<AuthzAsset> {
         return new Promise((resolve, reject) => {
-                // Generate keypairs from seeds.
-                this.log("Generating keypairs from supplied keys.");
-                let oldIdentity = this.generateKeyByBip39(oldKeySeed);
-                let newIdentity = this.generateKeyByBip39(newKeySeed);
+            // Generate keypairs from seeds.
+            this.log("Generating keypairs from supplied keys.");
+            let oldIdentity = this.generateKeyByBip39(oldKeySeed);
+            let newIdentity = this.generateKeyByBip39(newKeySeed);
 
-                // Pulling latest transaction from asset.
-                this.getLatestTransaction(assetId).then(returnedTransaction => {
+            // Pulling latest transaction from asset.
+            this.getLatestTransaction(assetId).then(returnedTransaction => {
 
-                    this.log(`Generating TRANSFER transaction.`);
+                this.log(`Generating TRANSFER transaction.`);
 
-                    // Create a transfer transaction in which we use the new identity as output.
-                    const updateKeyTransaction = driver.Transaction.makeTransferTransaction(
-                        // signedTx to transfer and output index
-                        [{ tx: returnedTransaction, output_index: 0 }],
+                // Create a transfer transaction in which we use the new identity as output.
+                const updateKeyTransaction = driver.Transaction.makeTransferTransaction(
+                    // signedTx to transfer and output index
+                    [{ tx: returnedTransaction, output_index: 0 }],
 
-                        [driver.Transaction.makeOutput(driver.Transaction.makeEd25519Condition(newIdentity.publicKey))],
+                    [driver.Transaction.makeOutput(driver.Transaction.makeEd25519Condition(newIdentity.publicKey))],
 
-                        // metadata
-                        new AuthzMetadata("update-key")
-                    );
+                    // metadata
+                    new AuthzMetadata("update-key")
+                );
 
-                    this.log(`Signing transfer transaction.`);
+                this.log(`Signing transfer transaction.`);
 
-                    // We sign the new transaction with the old identity.
-                    const signedUpdateKeyTransaction = driver.Transaction.signTransaction(updateKeyTransaction, oldIdentity.privateKey);
+                // We sign the new transaction with the old identity.
+                const signedUpdateKeyTransaction = driver.Transaction.signTransaction(updateKeyTransaction, oldIdentity.privateKey);
 
-                    // Send the TRANSFER transaction.
-                    this.log("Posting newly created transaction to the network.");
-                    return this.connection.postTransaction(signedUpdateKeyTransaction);
-                }).then(signedUpdateKeyTransaction => {
+                // Send the TRANSFER transaction.
+                this.log("Posting newly created transaction to the network.");
+                return this.connection.postTransaction(signedUpdateKeyTransaction);
+            }).then(signedUpdateKeyTransaction => {
 
-                    // Poll for status and move on.
-                    this.log("Polling for the created transactions' status.");
-                    return this.connection.pollStatusAndFetchTransaction(signedUpdateKeyTransaction.id);
-                }).then(response => {
+                // Poll for status and move on.
+                this.log("Polling for the created transactions' status.");
+                return this.connection.pollStatusAndFetchTransaction(signedUpdateKeyTransaction.id);
+            }).then(response => {
 
-                    this.log("Response transaction received:");
-                    this.log(response, false);
+                this.log("Response transaction received:");
+                this.log(response, false);
 
-                    this.log("Query for the asset this transaction belongs to.");
-                    // Get the asset from the transaction
-                    return this.getAsset(response.asset.id);
-                }).then(returnedAsset => {
-                    this.log(`Asset received, id: ${returnedAsset.assetId}`);
-                    resolve(returnedAsset);
-                }).catch(error => {
+                this.log("Query for the asset this transaction belongs to.");
+                // Get the asset from the transaction
+                return this.getAsset(response.asset.id);
+            }).then(returnedAsset => {
+                this.log(`Asset received, id: ${returnedAsset.assetId}`);
+                resolve(returnedAsset);
+            }).catch(error => {
 
-                    // Throw the error.
-                    reject(error);
-                });
+                // Throw the error.
+                reject(error);
+            });
         })
     }
 

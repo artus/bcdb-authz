@@ -1,0 +1,21 @@
+sudo: required
+
+language: node_js
+
+node_js:
+  - node
+
+services:
+  - docker
+
+
+install:
+  - git clone https://github.com/artusvranken/bigchaindb-docker-compose.git
+  - cd bigchaindb-docker-compose
+  - sh ./run.sh
+  - cd ..
+  - npm install
+  - npm run build
+
+script:
+- npm run test
