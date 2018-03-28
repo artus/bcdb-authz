@@ -1,19 +1,37 @@
 var mocha = require('mocha');
-var BcdbAuthz = require('../dist/BcdbAuthz');
+var bcdb_authz = require('../dist/BcdbAuthz');
 
 const api_url = "https://localhost:59884/api/v1/";
 
 const KEY_ALICE = "alice";
-const KEY_BOB   = "bob"
+const KEY_BOB = "bob"
 
-const bcdbAuthz = new BcdbAuthz(api_url);
+describe("BcdbAuthz.js", function () {
 
-describe("BcdbAuthz.js", function() {
+    // Set timeout to 10 seconds because BigchainDB is sloooooow
+    this.timeout(10000);
 
-    describe("Creating assets", function() {
+    describe("Constructor", function () {
 
-        it("should return a new AuthzAsset", function(done) {
-            bcdbAuthz.createAsset(KEY_ALICE).then( response => {
+        it("Should not fail when providing correct information", function (done) {
+            try {
+                var newBcdbAuthz = new bcdb_authz.BcdbAuthz(api_url);
+                if (typeof newBcdbAuthz == "undefined") throw new Error("Initializing new BcdbAuthz results in undefined.");
+
+                done();
+            }
+            catch (error) {
+                done(new Error(error));
+            }
+        });
+    });
+
+    describe("Creating assets", function () {
+
+        it("should return a new AuthzAsset", function (done) {
+            var bcdbAuthz = new bcdb_authz.BcdbAuthz(api_url);
+
+            bcdbAuthz.createAsset(KEY_ALICE).then(response => {
 
                 // Check if it is an AuthzAsset.
                 if (typeof response.assetId != "undefined" && typeof response.bcdbAuthzId != "undefined") done();
