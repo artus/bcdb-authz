@@ -1,7 +1,7 @@
 var mocha = require('mocha');
 var bcdb_authz = require('../dist/BcdbAuthz');
 
-const api_url = "https://localhost:59884/api/v1/";
+const api_url = "https://localhost:59984/api/v1/";
 
 const KEY_ALICE = "alice";
 const KEY_BOB = "bob"
