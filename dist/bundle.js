@@ -194,13 +194,25 @@ class BcdbAuthz {
     }
     /**
      * Create a new asset that should have its authorization controlled on bigchaindb.
-     * @param {string} assetKeySeed - The seed that will be used to generate the keypair which will be used to update the asset in the future.
-     * @returns {Promise<any>} The newly created transaction wrapped in a promise.
+     * @param {string} assetKeySeed - The seed that will be used to generate a keypair.
+     * @returns {Promise<AuthzAsset>} The newly created AuthzAsset wrapped in promise.
      */
-    createAsset(assetKeySeed) {
+    createAssetByKeySeed(assetKeySeed) {
+        if (assetKeySeed == undefined)
+            throw new Error("No keyseed provided");
+        // Generate an identity with the supplied assetKey.
+        let identity = this.generateKeyByBip39(assetKeySeed);
+        return this.createAsset(identity);
+    }
+    /**
+     * Create a new asset that should have its authorization controlled on bigchaindb.
+     * @param {any} assetKeySeed - The keypair which will be used to update the asset in the future.
+     * @returns {Promise<AuthzAsset>} The newly created AuthzAsset wrapped in a promise.
+     */
+    createAsset(identity) {
+        if (identity == undefined)
+            throw new Error("No keypair provided.");
         return new Promise((resolve, reject) => {
-            // Generate an identity with the supplied assetKey.
-            let identity = this.generateKeyByBip39(assetKeySeed);
             // Generate a new identity for the AuthzAsset.
             let authId = this.generateAuthzAssetId();
             // Wrap the AuthzAssetId in an asset object
