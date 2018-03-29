@@ -189,11 +189,29 @@ export class BcdbAuthz {
      * @param {string} keySeed - The seed we want to use to generate a keypair, which we will use to sign the transaction.
      * @param {AuthzAction} authzAction - The operation that needs to be performed on the asset with supplied ID.
      */
-    updateAsset(assetId: string, keySeed: string, authzAction: AuthzAction): Promise<AuthzAsset> {
+    updateAssetByKeySeed(assetId: string, keySeed: string, authzAction: AuthzAction): Promise<AuthzAsset> {
+
+        // Throw error if no keySeed was provided.
+        if (keySeed == undefined) throw new Error("No Keyseed provided.");
+
+        // Generate identity.
+        let identity = this.generateKeyByBip39(keySeed);
+
+        return this.updateAsset(assetId, identity, authzAction);
+    }
+
+    /**
+     * Update the persmissions for a certain asset with supplied ID and where transactions can be performed upon by using the keypair that can be generated with supplied keySeed.
+     * 
+     * @param {string} assetId - The ID of the asset we want to update the permissions from.
+     * @param {any} identity - The seed we want to use to generate a keypair, which we will use to sign the transaction.
+     * @param {AuthzAction} authzAction - The operation that needs to be performed on the asset with supplied ID.
+     */
+    updateAsset(assetId: string, identity: any, authzAction: AuthzAction): Promise<AuthzAsset> {
         return new Promise<AuthzAsset>((resolve, reject) => {
 
-            // Generate keypair with supplied keySeed.
-            let identity = this.generateKeyByBip39(keySeed);
+            // Check if a keypair was supplied.
+            if (identity == undefined) throw new Error("No keypair provided.");
 
             // Search for the latest transaction that is involved in this asset.
             this.connection.listTransactions(assetId).then(transactionList => {

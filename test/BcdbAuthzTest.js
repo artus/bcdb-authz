@@ -83,6 +83,9 @@ describe("BcdbAuthz.js", function () {
                 done();
             }
         });
+    });
+
+    describe("Updating assets", function () {
 
     });
 });
