@@ -2,7 +2,7 @@
     <img src="./resources/img/logo-small.png">
 </p>
 
-[![Build Status](https://travis-ci.org/artusvranken/bcdb-authz.svg?branch=master)](https://travis-ci.org/artusvranken/bcdb-authz)
+[![Build Status](https://travis-ci.org/artus/bcdb-authz.svg?branch=master)](https://travis-ci.org/artusvranken/bcdb-authz)
 
 # bcdb-authz
 ## Using blockchain as an Authorization layer.
